@@ -1,0 +1,499 @@
+---
+title: "Illinois_Complete_Streets"
+author: "JJ Davidoff"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+setwd("~/Downloads/SPRING 2025/IEC Transportation/Complete Streets")
+
+#–– Data-wrangling & import
+library(tidyverse)   # ggplot2, dplyr, tidyr, readr, purrr, tibble, stringr, forcats
+library(janitor)     # cleaning names, removing empty rows/cols, freq tables
+library(lubridate)   # working with dates/times
+library(readxl)      # reading Excel files
+library(haven)       # reading SPSS/Stata/SAS files
+
+#–– Quick summaries & tables
+library(skimr)       # skim() for compact overviews
+library(broom)       # tidy(), glance(), augment() for model outputs
+library(knitr)       # kable() for nice tables
+
+#–– Visualization helpers
+# (ggplot2 is already loaded via tidyverse)
+library(ggthemes)    # extra themes & palettes
+library(cowplot)     # aligning/annotating multiple plots
+library(patchwork)   # combining ggplots with + operator
+library(plotly)      # interactive graphics
+
+#–– (Optional) interactive tables, spatial, modeling, etc.
+library(DT)        # datatable outputs
+library(sf)        # simple features / spatial analysis
+library(modelr)    # helpers for modeling within the tidyverse
+
+library(ineq)
+library(scales)
+
+#–– Knit options
+knitr::opts_chunk$set(
+  echo   = TRUE,
+  message= FALSE,
+  warning= FALSE
+)
+```
+
+```{r load-in-sf}
+
+il_municipalities <- read_sf("Complete Streets/IL_ADMIN_Municipality_2000_Py")
+chicagoland_municipalities <- read_sf("Complete Streets/Municipalities_Northeastern_Illinois_2024") %>%
+  rename(Municipality = muni)
+
+
+# assume il_municipalities is the full‐state shapefile you loaded earlier
+# and chicagoland_municipalities is just the NE‐IL subset
+
+ggplot() +
+  # 1) draw the whole state in a light grey
+  geom_sf(
+    data        = il_municipalities,
+    fill        = "#EEEEEE", 
+    color       = "#CCCCCC",
+    size        = 0.2,
+    inherit.aes = FALSE
+  ) +
+  # 2) then overlay only the NE‐IL municipalities in white with darker borders
+  geom_sf(
+    data        = chicagoland_municipalities,
+    fill        = "#FFFFFF",
+    color       = "#333333",
+    size        = 0.3,
+    inherit.aes = FALSE
+  ) +
+  labs(
+    title = "Chicago-Land Municipalities in Context of Full Illinois"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.text     = element_blank(),
+    axis.ticks    = element_blank(),
+    panel.grid    = element_blank()
+  )
+```
+
+```{r load-in-data}
+CMAP_CS_data <- read_csv("Complete Streets/Comp Plan Includes Bike_Ped.csv")
+
+# 3) Join the CSV attributes onto the sf
+chicago_cs_map <- chicagoland_municipalities %>%
+  left_join(CMAP_CS_data, by = "Municipality")
+```
+
+
+```{r plot}
+ggplot() +
+  # full‐state backdrop
+  geom_sf(
+    data        = il_municipalities,
+    fill        = "#F5F5F5",
+    color       = "#CCCCCC",
+    size        = 0.2,
+    inherit.aes = FALSE
+  ) +
+  # NE‐IL municipalities colored by CS plan/policy
+  geom_sf(
+    data        = chicago_cs_map,
+    aes(fill    = `Complete Streets Plan/Policy`),
+    color       = "#333333",
+    size        = 0.3,
+    inherit.aes = FALSE
+  ) +
+  scale_fill_manual(
+    values = c("Yes" = "#1f78b4", "No" = "#e31a1c"),
+    na.value = "#FFFFFF",
+    name     = "CS Plan/Policy"
+  ) +
+  labs(
+    title    = "Complete Streets Plan/Policy Adoption in Northeastern Illinois",
+    subtitle = "Colored by whether each municipality has a CS plan/policy",
+    caption  = "Data source: CMAP Bike & PED Database"
+  ) +
+  coord_sf(
+    xlim   = c(-89, -87),  # min & max longitude around Chicagoland
+    ylim   = c(41,  43),   # min & max latitude around Chicagoland
+    expand = FALSE
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    axis.text     = element_blank(),
+    axis.ticks    = element_blank(),
+    panel.grid    = element_blank()
+  )
+```
+
+```{r plot-bikeped-plan, echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(sf)
+
+ggplot() +
+  # Full-state backdrop
+  geom_sf(
+    data        = il_municipalities,
+    fill        = "#F5F5F5",
+    color       = "#CCCCCC",
+    size        = 0.2,
+    inherit.aes = FALSE
+  ) +
+  # NE-IL municipalities colored by Bike/Ped Plan status
+  geom_sf(
+    data        = chicago_cs_map,
+    aes(fill    = `Bike/Ped Plan`),
+    color       = "#333333",
+    size        = 0.3,
+    inherit.aes = FALSE
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Yes" = "#2ecc71",  # green for Yes
+    "No"  = "#e67e22"   # orange for No
+    ),
+    na.value = "#FFFFFF",
+    name     = "Bike/Ped Plan"
+  ) +
+  coord_sf(
+    xlim   = c(-89, -87),  # min & max longitude around Chicagoland
+    ylim   = c(41,  43),   # min & max latitude around Chicagoland
+    expand = FALSE
+  ) +
+  labs(
+    title    = "Bike/Ped Plan Adoption in Northeastern Illinois",
+    subtitle = "Colored by whether each municipality has a Bike/Ped plan",
+    caption  = "Data source: CMAP Bike & PED Database"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    legend.position = "right",
+    axis.text     = element_blank(),
+    axis.ticks    = element_blank(),
+    panel.grid    = element_blank()
+  )
+```
+
+```{r plot-bikeplan-year, echo=FALSE, message=FALSE, warning=FALSE}
+library(viridis)  # for nice sequential palettes
+
+# Ensure your data are in WGS84; reproject if needed
+# chicago_cs_map <- st_transform(chicago_cs_map, 4326)
+# il_municipalities <- st_transform(il_municipalities, 4326)
+
+# Filter to NE‐IL municipalities (if not already) and optionally make Bike Plan Year a factor
+bike_year_map <- chicago_cs_map %>%
+  # include all, or filter(!is.na(`Bike Plan Year`)) if you only want those with a plan
+  mutate(`Bike Plan Year` = as.factor(`Bike Plan Year`))
+
+# Define a Chicagoland zoom
+xlims <- c(-89, -87)
+ylims <- c(41,   43)
+
+ggplot() +
+  # full‐state backdrop
+  geom_sf(
+    data        = il_municipalities,
+    fill        = "#F5F5F5",
+    color       = "#CCCCCC",
+    size        = 0.2,
+    inherit.aes = FALSE
+  ) +
+  # NE‐IL choropleth by bike‐plan year
+  geom_sf(
+    data        = bike_year_map,
+    aes(fill    = `Bike Plan Year`),
+    color       = "#333333",
+    size        = 0.3,
+    inherit.aes = FALSE
+  ) +
+  # sequential discrete palette by year
+  scale_fill_viridis_d(
+    option   = "plasma",
+    direction = -1,
+    na.value = "grey90",
+    name      = "Bike Plan Year"
+  ) +
+  coord_sf(
+    xlim    = xlims,
+    ylim    = ylims,
+    expand  = FALSE
+  ) +
+  labs(
+    title    = "Choropleth of Bike Plan Adoption Year\nin Northeastern Illinois",
+    subtitle = "Municipalities colored by the year their Bike Plan was written",
+    caption  = "Data source: CMAP Bike & PED Database"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    legend.position = "right",
+    axis.text     = element_blank(),
+    axis.ticks    = element_blank(),
+    panel.grid    = element_blank()
+  )
+```
+
+
+```{r load-in-data}
+ITEP_20132020 <- read_csv(
+  "Complete Streets/ITEP_20132020_Awarded.csv",
+  col_select = 1:23,
+  n_max      = 223
+)
+
+ITEP2022 <- read_csv(
+  "Complete Streets/ITEP2022.csv",
+  col_names = FALSE        # read every line as data
+) %>%
+  row_to_names(row_number = 2) # use the 2nd row for names
+
+ITEP2024 <- read_csv(
+  "Complete Streets/ITEP2024.csv",
+    col_names = FALSE        # read every line as data
+) %>%
+  row_to_names(row_number = 6) # use the 2nd row for names
+```
+
+
+```{r geocode, echo=FALSE, message=FALSE, warning=FALSE}
+
+library(tidygeocoder)
+
+# 1) Define Illinois bounding box (min lon, min lat, max lon, max lat)
+ill_bb <- "-91.51308,36.970298,-87.019935,42.508481"
+
+
+ITEP2022_geocoded <- read_csv("Complete Streets/ITEP2022_geocoded.csv")
+
+# 2) Convert to an sf point layer
+#    assuming your CSV has columns named 'lon' for longitude and 'lat' for latitude
+ITEP2022_sf <- st_as_sf(
+  ITEP2022_geocoded,
+  coords = c("lon", "lat"),
+  crs    = 4326,
+  remove = FALSE   # keep the lon/lat columns if you want
+)
+
+
+ITEP20132020_geocoded <- read_csv("Complete Streets/ITEP_20132020_geocoded.csv")
+
+# 2) Convert to an sf point layer
+#    assuming your CSV has columns named 'lon' for longitude and 'lat' for latitude
+ITEP20132020_sf <- st_as_sf(
+  ITEP20132020_geocoded,
+  coords = c("lon", "lat"),
+  crs    = 4326,
+  remove = FALSE   # keep the lon/lat columns if you want
+)
+
+
+ITEP2024_geocoded <- read_csv("Complete Streets/ITEP_2024_geocoded.csv")
+
+# 2) Convert to an sf point layer
+#    assuming your CSV has columns named 'lon' for longitude and 'lat' for latitude
+ITEP2024_sf <- st_as_sf(
+  ITEP2024_geocoded,
+  coords = c("lon", "lat"),
+  crs    = 4326,
+  remove = FALSE   # keep the lon/lat columns if you want
+)
+```
+
+
+```{r plot-itep-on-county, echo=FALSE, message=FALSE, warning=FALSE}
+library(sf)
+library(dplyr)
+library(ggplot2)
+
+# 1) Read the Illinois county boundary shapefile
+IL_BNDY_County <- st_read("~/Downloads/SPRING 2025/IEC Transportation/IL_BNDY_County", quiet = TRUE)
+
+# 2) Combine all ITEP point layers into one, tagging by award period
+ITEP_all <- bind_rows(
+  ITEP20132020_sf %>% mutate(period = "2013–2020"),
+  ITEP2022_sf      %>% mutate(period = "2022"),
+  ITEP2024_sf      %>% mutate(period = "2024")
+)
+
+# 3) Plot: county boundary + all ITEP points colored by period
+ggplot() +
+  # County outline
+  geom_sf(
+    data        = IL_BNDY_County,
+    fill        = NA,
+    color       = "#444444",
+    size        = 0.4,
+    inherit.aes = FALSE
+  ) +
+  # ITEP project locations
+  geom_sf(
+    data        = ITEP_all,
+    aes(color    = period),
+    size        = 2,
+    alpha       = 0.8,
+    inherit.aes = FALSE
+  ) +
+  scale_color_manual(
+    values = c(
+      "2013–2020" = "#1f78b4",
+      "2022"      = "#33a02c",
+      "2024"      = "#e31a1c"
+    ),
+    name = "Award Period"
+  ) +
+  labs(
+    title    = "ITEP Project Locations by Award Period",
+    subtitle = "Overlaid on Illinois County Boundary",
+    x        = NULL,
+    y        = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    legend.position = "right",
+    axis.text     = element_blank(),
+    axis.ticks    = element_blank(),
+    panel.grid    = element_blank()
+  )
+```
+
+
+```{r plot-itep-kde, echo=FALSE, message=FALSE, warning=FALSE}
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(viridis)
+
+# 1) Read & project the county boundary and points into a planar CRS (US feet)
+IL_proj       <- st_read("~/Downloads/SPRING 2025/IEC Transportation/IL_BNDY_County", quiet=TRUE) %>%
+                   st_transform(26971)
+ITEP_all_proj <- bind_rows(
+  ITEP20132020_sf %>% mutate(period="2013–2020"),
+  ITEP2022_sf      %>% mutate(period="2022"),
+  ITEP2024_sf      %>% mutate(period="2024")
+) %>%
+  st_transform(26971)
+
+# 2) Extract raw coordinates
+pts_df <- ITEP_all_proj %>%
+  st_coordinates() %>%
+  as_tibble() %>%
+  bind_cols(st_drop_geometry(ITEP_all_proj))
+
+# 3) Plot
+ggplot() +
+  # County outline
+  geom_sf(
+    data        = IL_proj,
+    fill        = NA,
+    color       = "#444444",
+    size        = 0.4,
+    inherit.aes = FALSE
+  ) +
+  # KDE heatmap
+  stat_density2d(
+    data    = pts_df,
+    aes(x = X, y = Y, fill = ..level.., alpha = ..level..),
+    geom    = "polygon",
+    contour = TRUE
+  ) +
+  scale_fill_viridis(
+    option = "magma",
+    name   = "Density"
+  ) +
+  scale_alpha(
+    range = c(0.2, 0.6),
+    guide = FALSE
+  ) +
+  # (optional) add raw points on top
+  geom_point(
+    data = pts_df,
+    aes(x = X, y = Y),
+    color = "white",
+    size  = 0.8,
+    alpha = 0.5
+  ) +
+  coord_sf(crs = st_crs(IL_proj)) +
+  labs(
+    title    = "Kernel Density of ITEP Project Locations (2013–2024)",
+    subtitle = "Projected into NAD83 / Illinois East (ftUS)",
+    x        = NULL, y = NULL
+  ) +
+  theme_void() +
+  theme(
+    plot.title    = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    legend.position = "right"
+  )
+```
+
+```{r itep-summaries}
+library(dplyr)
+
+# 1. Extract year from Cycle_Date and aggregate Project_Total
+ITEP_20132020_summary <- ITEP_20132020 %>%
+  mutate(
+    Year = as.integer(gsub(".*(\\d{4})$", "\\1", Cycle_Date)),
+    # Use Approved_Federal_Funds for specific years, otherwise Project_Total
+    Funding_Amount = case_when(
+      Year %in% c(2013, 2016, 2018) ~ as.numeric(gsub("[^0-9.]", "", Approved_Federal_Funds)),
+      TRUE ~ as.numeric(gsub("[^0-9.]", "", Project_Total))
+    )
+  ) %>%
+  group_by(Year) %>%
+  summarise(Total_Project_Funds = sum(Funding_Amount, na.rm = TRUE))
+
+ITEP2022_summary <- ITEP2022 %>%
+  mutate(`Total Funds Awarded` = as.numeric(gsub("[^0-9.]", "", `Total Funds Awarded`))) %>%
+  summarise(Year = 2022, Total_Project_Funds = sum(`Total Funds Awarded`, na.rm = TRUE))
+
+# 3. Aggregate Total Funds Awarded for 2024 with numeric conversion
+ITEP2024_summary <- ITEP2024 %>%
+  mutate(`Total Funds Awarded` = as.numeric(gsub("[^0-9.]", "", `Total Funds Awarded`))) %>%
+  summarise(Year = 2024, Total_Project_Funds = sum(`Total Funds Awarded`, na.rm = TRUE))
+
+# 4. Combine all into one data frame
+ITEP_all_years_summary <- bind_rows(
+  ITEP_20132020_summary,
+  ITEP2022_summary,
+  ITEP2024_summary
+) %>%
+  arrange(Year)
+
+# Display result
+print(ITEP_all_years_summary)
+
+```
+
+```{r plot-itep}
+# If not already a dataframe
+ITEP_all_years_summary <- data.frame(
+  Year = c(2013, 2016, 2018, 2020, 2022, 2024),
+  Total_Project_Funds = c(48265390, 22166810, 21440600, 194168530, 129638813, 139187851)
+)
+
+# Plot
+ggplot(ITEP_all_years_summary, aes(x = factor(Year), y = Total_Project_Funds)) +
+  geom_bar(stat = "identity", fill = "#1f78b4") +
+  labs(
+    title = "ITEP Total Project Funds by Year",
+    x = "Year",
+    y = "Total Project Funds (USD)"
+  ) +
+  scale_y_continuous(labels = scales::comma) +
+  theme_minimal(base_size = 14)
+```
